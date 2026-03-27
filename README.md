@@ -4,7 +4,7 @@
 
 - **Nombre:** Joaquin Vanrell
 - **Legajo:** 64018
-- **Email:** l.vanrell@alumno.um.edu.ar
+- **Email:** j.vanrell@alumno.um.edu.ar
 - **GitHub:** @JoacoVanrell (https://github.com/JoacoVanrell)
 
 ## Estructura

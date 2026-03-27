@@ -1,0 +1,6 @@
+Error de conexión
+Todo funcionando bien
+error de timeout
+INFO: servidor iniciado
+ERROR crítico del sistema
+DEBUG: variable x = 5
