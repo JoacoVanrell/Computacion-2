@@ -1,0 +1,20 @@
+services:
+  monitor:
+    build: .
+    container_name: compu2-monitor
+
+    # Comparte el PID namespace del host: sin esto solo veríamos
+    # los procesos del contenedor.
+    pid: "host"
+
+    # Necesarios para que la TUI de curses funcione.
+    stdin_open: true
+    tty: true
+
+    volumes:
+      # Código montado: editás afuera y no hay que rebuildear.
+      - ./src:/app/src
+      - ./config.json:/app/config.json
+      # Los dumps de SIGUSR1 quedan en tu máquina.
+      - ./dumps:/app/dumps
+      - /etc/passwd:/etc/passwd:ro
