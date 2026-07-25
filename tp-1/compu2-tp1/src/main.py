@@ -1,25 +1,34 @@
 import multiprocessing as mp
 import time
 from analizadores import base, resumen
+from agregador import loop_agregador
 
 
 def main():
     manager = mp.Manager()
     snapshot = manager.dict()
+    queue = mp.Queue()
 
     # Value = memoria compartida real para tipos simples.
     # 'd' = double, 'b' = byte (lo usamos como booleano).
     intervalo = mp.Value('d', 2.0)
     corriendo = mp.Value('b', True)
 
-    p = mp.Process(
+    p_analizador = mp.Process(
         target=base.loop_analizador,
-        args=('resumen', resumen.recolectar, snapshot, intervalo, corriendo),
+        args=('resumen', resumen.recolectar, queue, intervalo, corriendo),
         name='analizador-resumen',
     )
-    p.start()
+    p_agregador = mp.Process(
+        target=loop_agregador,
+        args=(queue, snapshot, corriendo),
+        name='agregador',
+    )
+    p_analizador.start()
+    p_agregador.start()
     print(f'proceso principal PID {mp.current_process().pid}')
-    print(f'analizador-resumen  PID {p.pid}\n')
+    print(f'analizador-resumen  PID {p_analizador.pid}')
+    print(f'agregador           PID {p_agregador.pid}\n')
 
     try:
         for i in range(6):
@@ -47,8 +56,10 @@ def main():
 
     finally:
         corriendo.value = False
-        p.join(timeout=3)
-        print(f'analizador terminado, exitcode={p.exitcode}')
+        p_analizador.join(timeout=3)
+        p_agregador.join(timeout=3)
+        print(f'analizador terminado, exitcode={p_analizador.exitcode}')
+        print(f'agregador terminado,  exitcode={p_agregador.exitcode}')
 
 
 if __name__ == '__main__':
