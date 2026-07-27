@@ -14,6 +14,18 @@ def listar_pids():
     return [int(n) for n in os.listdir('/proc') if n.isdigit()]
 
 
+def listar_tids(pid):
+    """
+    Lista los TIDs (threads/LWPs) de un proceso, vía /proc/<pid>/task.
+    Cada TID es un PID real, único en todo el sistema.
+    Devuelve None si el proceso ya no existe.
+    """
+    try:
+        return [int(n) for n in os.listdir(f'/proc/{pid}/task') if n.isdigit()]
+    except (FileNotFoundError, ProcessLookupError, PermissionError):
+        return None
+
+
 def leer_stat(pid, tid=None):
     """
     Parsea /proc/<pid>/stat (o /proc/<pid>/task/<tid>/stat si se pasa tid).
@@ -91,6 +103,81 @@ def leer_cmdline(pid):
         st = leer_stat(pid)
         return f'[{st["comm"]}]' if st else ''
     return ' '.join(crudo.decode(errors='replace').split('\0')).strip()
+
+
+def leer_maps(pid):
+    """
+    Parsea /proc/<pid>/maps y agrupa los segmentos por tipo, sumando
+    el tamaño de cada uno (fin - inicio de cada rango) en KB.
+    Devuelve None si el proceso ya no existe.
+    """
+    try:
+        with open(f'/proc/{pid}/maps') as f:
+            lineas = f.readlines()
+    except (FileNotFoundError, ProcessLookupError, PermissionError):
+        return None
+
+    segmentos = {'text': 0, 'data': 0, 'heap': 0, 'stack': 0, 'shared': 0, 'otros': 0}
+
+    for linea in lineas:
+        partes = linea.split(maxsplit=5)
+        rango, perms = partes[0], partes[1]
+        pathname = partes[5].strip() if len(partes) > 5 else ''
+
+        inicio, fin = (int(x, 16) for x in rango.split('-'))
+        tam_kb = (fin - inicio) // 1024
+
+        if pathname == '[heap]':
+            categoria = 'heap'
+        elif pathname == '[stack]':
+            categoria = 'stack'
+        elif 'x' in perms:
+            categoria = 'text'
+        elif 's' in perms:
+            categoria = 'shared'
+        elif 'w' in perms:
+            categoria = 'data'
+        else:
+            categoria = 'otros'
+
+        segmentos[categoria] += tam_kb
+
+    return segmentos
+
+
+def listar_fds(pid):
+    """
+    Lista los FDs abiertos de un proceso: su destino y su tipo
+    (tty/socket/pipe/device/file), inferido del string que devuelve
+    el symlink de /proc/<pid>/fd/<n>. Devuelve None si el proceso
+    ya no existe.
+    """
+    try:
+        entradas = os.listdir(f'/proc/{pid}/fd')
+    except (FileNotFoundError, ProcessLookupError, PermissionError):
+        return None
+
+    fds = []
+    for entrada in entradas:
+        try:
+            destino = os.readlink(f'/proc/{pid}/fd/{entrada}')
+        except (FileNotFoundError, ProcessLookupError, PermissionError):
+            continue  # el FD se cerró entre el listdir y el readlink
+
+        if destino.startswith('socket:'):
+            tipo = 'socket'
+        elif destino.startswith('pipe:'):
+            tipo = 'pipe'
+        elif destino.startswith('/dev/pts/') or destino.startswith('/dev/tty'):
+            tipo = 'tty'
+        elif destino.startswith('/dev/'):
+            tipo = 'device'
+        else:
+            tipo = 'file'
+
+        fds.append({'fd': int(entrada), 'destino': destino, 'tipo': tipo})
+
+    return fds
 
 
 def kb(valor):
