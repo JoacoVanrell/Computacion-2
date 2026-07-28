@@ -3,6 +3,7 @@ Helpers para leer y parsear /proc.
 Todo el acceso al kernel pasa por acá: los analizadores no abren archivos.
 """
 import os
+import signal
 
 # Jiffies por segundo: el kernel cuenta el tiempo de CPU en "ticks".
 # En Linux moderno son 100, pero se lo preguntamos al sistema.
@@ -178,6 +179,74 @@ def listar_fds(pid):
         fds.append({'fd': int(entrada), 'destino': destino, 'tipo': tipo})
 
     return fds
+
+
+def decodificar_mascara(hex_str):
+    """
+    Convierte una máscara hex de señales (SigBlk, SigIgn, SigCgt, SigPnd,
+    ShdPnd) en la lista de nombres de señal que representa.
+    El bit N (desde 0) representa la señal N+1 (no existe la señal 0).
+    """
+    numero = int(hex_str, 16)
+    nombres = []
+    for n in range(64):
+        if numero & (1 << n):
+            sig = n + 1
+            try:
+                nombres.append(signal.Signals(sig).name)
+            except ValueError:
+                nombres.append(f'RT{sig}')  # señal de tiempo real sin nombre fijo
+    return nombres
+
+
+_POLICIAS = {0: 'OTHER', 1: 'FIFO', 2: 'RR', 3: 'BATCH', 5: 'IDLE'}
+
+
+def nombre_policy(codigo):
+    """Traduce el código numérico de /proc/<pid>/stat (campo 41) a su nombre."""
+    return _POLICIAS.get(codigo, f'DESCONOCIDA({codigo})')
+
+
+def leer_stat_global():
+    """
+    Datos globales de /proc/stat: jiffies acumulados de CPU (suma de
+    todos los cores, línea 'cpu ') y hora de boot (línea 'btime').
+    A diferencia de los archivos por PID, /proc/stat siempre existe
+    mientras el sistema está prendido: no hace falta try/except TOCTOU.
+    """
+    resultado = {}
+    with open('/proc/stat') as f:
+        for linea in f:
+            if linea.startswith('cpu '):
+                campos = linea.split()[1:]
+                claves = ['user', 'nice', 'system', 'idle', 'iowait',
+                          'irq', 'softirq', 'steal', 'guest', 'guest_nice']
+                resultado['cpu'] = {k: int(v) for k, v in zip(claves, campos)}
+            elif linea.startswith('btime'):
+                resultado['btime'] = int(linea.split()[1])
+    return resultado
+
+
+def leer_meminfo():
+    """/proc/meminfo: mismo formato 'Clave:   valor kB' que /status."""
+    datos = {}
+    with open('/proc/meminfo') as f:
+        for linea in f:
+            if ':' in linea:
+                clave, valor = linea.split(':', 1)
+                datos[clave.strip()] = valor.strip()
+    return datos
+
+
+def leer_loadavg():
+    """/proc/loadavg: promedios de carga de 1, 5 y 15 minutos."""
+    campos = open('/proc/loadavg').read().split()
+    return {'1min': float(campos[0]), '5min': float(campos[1]), '15min': float(campos[2])}
+
+
+def leer_uptime():
+    """/proc/uptime: segundos transcurridos desde el boot."""
+    return float(open('/proc/uptime').read().split()[0])
 
 
 def kb(valor):
