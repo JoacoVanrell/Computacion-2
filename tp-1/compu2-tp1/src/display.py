@@ -23,6 +23,33 @@ def _fila(stdscr, y, texto, seleccionada):
     stdscr.addstr(y, 0, texto, atributo)
 
 
+def _layout(stdscr):
+    """
+    Reparte la pantalla en dos zonas: la lista (arriba) y el panel de
+    detalle (abajo, hasta 1/3 de la pantalla). Devuelve cuántas filas
+    le tocan a cada una.
+    """
+    filas, columnas = stdscr.getmaxyx()
+    filas_detalle = min(10, max(3, filas // 3))
+    max_filas_lista = max(0, filas - 2 - filas_detalle - 1)
+    fila_detalle = filas - filas_detalle
+    return columnas, max_filas_lista, fila_detalle, filas_detalle
+
+
+def _panel_detalle(stdscr, item, fila_inicio, filas_detalle, columnas):
+    """Muestra todos los campos del item seleccionado, uno por línea."""
+    stdscr.hline(fila_inicio - 1, 0, curses.ACS_HLINE, columnas)
+
+    if item is None:
+        stdscr.addstr(fila_inicio, 0, '(sin selección)')
+        return
+
+    campos = list(item.items())[:filas_detalle - 1]
+    for i, (clave, valor) in enumerate(campos):
+        texto = f'{clave}: {valor}'
+        stdscr.addstr(fila_inicio + i, 0, texto[:columnas - 1])
+
+
 def dibujar_resumen(stdscr, snapshot, seleccionado=0):
     entrada = snapshot.get('resumen')
     stdscr.erase()
@@ -32,14 +59,16 @@ def dibujar_resumen(stdscr, snapshot, seleccionado=0):
     _encabezado(stdscr, entrada, 'RESUMEN')
     stdscr.addstr(1, 0, f'{"PID":>7} {"ST":<2} {"CPU%":>6} {"RSS":>8}  COMANDO')
 
-    filas, columnas = stdscr.getmaxyx()
-    max_filas = max(0, filas - 3)
+    columnas, max_filas, fila_detalle, filas_detalle = _layout(stdscr)
     top = sorted(entrada['datos'].values(), key=lambda x: x['cpu'], reverse=True)[:max_filas]
 
     for i, pr in enumerate(top):
         linea = (f'{pr["pid"]:>7} {pr["estado"]:<2} {pr["cpu"]:>6.1f} '
                  f'{pr["rss_kb"] / 1024:>7.1f}M  {pr["comando"]}')
         _fila(stdscr, 2 + i, linea[:columnas - 1], i == seleccionado)
+
+    item = top[seleccionado] if 0 <= seleccionado < len(top) else None
+    _panel_detalle(stdscr, item, fila_detalle, filas_detalle, columnas)
 
     stdscr.refresh()
 
@@ -53,8 +82,7 @@ def dibujar_memoria(stdscr, snapshot, seleccionado=0):
     _encabezado(stdscr, entrada, 'MEMORIA')
     stdscr.addstr(1, 0, f'{"PID":>7} {"RSS":>8} {"VMSIZE":>9} {"HEAP":>7} {"STACK":>7}')
 
-    filas, columnas = stdscr.getmaxyx()
-    max_filas = max(0, filas - 3)
+    columnas, max_filas, fila_detalle, filas_detalle = _layout(stdscr)
     top = sorted(entrada['datos'].values(), key=lambda x: x['vm_rss_kb'], reverse=True)[:max_filas]
 
     for i, pr in enumerate(top):
@@ -63,6 +91,9 @@ def dibujar_memoria(stdscr, snapshot, seleccionado=0):
         linea = (f'{pr["pid"]:>7} {pr["vm_rss_kb"] / 1024:>7.1f}M {pr["vm_size_kb"] / 1024:>8.1f}M '
                  f'{heap:>6}K {stack:>6}K')
         _fila(stdscr, 2 + i, linea[:columnas - 1], i == seleccionado)
+
+    item = top[seleccionado] if 0 <= seleccionado < len(top) else None
+    _panel_detalle(stdscr, item, fila_detalle, filas_detalle, columnas)
 
     stdscr.refresh()
 
@@ -76,14 +107,16 @@ def dibujar_fds(stdscr, snapshot, seleccionado=0):
     _encabezado(stdscr, entrada, 'FILE DESCRIPTORS')
     stdscr.addstr(1, 0, f'{"PID":>7} {"FDS":>5}  TIPOS (primeros 5)')
 
-    filas, columnas = stdscr.getmaxyx()
-    max_filas = max(0, filas - 3)
+    columnas, max_filas, fila_detalle, filas_detalle = _layout(stdscr)
     top = sorted(entrada['datos'].values(), key=lambda x: x['cantidad'], reverse=True)[:max_filas]
 
     for i, pr in enumerate(top):
         tipos = ', '.join(f['tipo'] for f in pr['fds'][:5])
         linea = f'{pr["pid"]:>7} {pr["cantidad"]:>5}  {tipos}'
         _fila(stdscr, 2 + i, linea[:columnas - 1], i == seleccionado)
+
+    item = top[seleccionado] if 0 <= seleccionado < len(top) else None
+    _panel_detalle(stdscr, item, fila_detalle, filas_detalle, columnas)
 
     stdscr.refresh()
 
@@ -104,13 +137,15 @@ def dibujar_threads(stdscr, snapshot, seleccionado=0):
     stdscr.addstr(0, 0, f'THREADS - {len(filas_threads)} threads - dato de hace {edad:.1f}s')
     stdscr.addstr(1, 0, f'{"PID":>7} {"TID":>7} {"ST":<2} {"CPU%":>6}  NOMBRE')
 
-    filas, columnas = stdscr.getmaxyx()
-    max_filas = max(0, filas - 3)
+    columnas, max_filas, fila_detalle, filas_detalle = _layout(stdscr)
     top = sorted(filas_threads, key=lambda x: x['cpu'], reverse=True)[:max_filas]
 
     for i, t in enumerate(top):
         linea = f'{t["pid"]:>7} {t["tid"]:>7} {t["estado"]:<2} {t["cpu"]:>6.1f}  {t["nombre"]}'
         _fila(stdscr, 2 + i, linea[:columnas - 1], i == seleccionado)
+
+    item = top[seleccionado] if 0 <= seleccionado < len(top) else None
+    _panel_detalle(stdscr, item, fila_detalle, filas_detalle, columnas)
 
     stdscr.refresh()
 
@@ -124,14 +159,16 @@ def dibujar_senales(stdscr, snapshot, seleccionado=0):
     _encabezado(stdscr, entrada, 'SEÑALES')
     stdscr.addstr(1, 0, f'{"PID":>7} {"BLOQ":>4} {"IGN":>4} {"HDLR":>4} {"PEND":>4}')
 
-    filas, columnas = stdscr.getmaxyx()
-    max_filas = max(0, filas - 3)
+    columnas, max_filas, fila_detalle, filas_detalle = _layout(stdscr)
     procesos = list(entrada['datos'].values())[:max_filas]
 
     for i, pr in enumerate(procesos):
         linea = (f'{pr["pid"]:>7} {len(pr["bloqueadas"]):>4} {len(pr["ignoradas"]):>4} '
                  f'{len(pr["con_handler"]):>4} {len(pr["pendientes_proceso"]):>4}')
         _fila(stdscr, 2 + i, linea[:columnas - 1], i == seleccionado)
+
+    item = procesos[seleccionado] if 0 <= seleccionado < len(procesos) else None
+    _panel_detalle(stdscr, item, fila_detalle, filas_detalle, columnas)
 
     stdscr.refresh()
 
@@ -145,8 +182,7 @@ def dibujar_scheduling(stdscr, snapshot, seleccionado=0):
     _encabezado(stdscr, entrada, 'SCHEDULING')
     stdscr.addstr(1, 0, f'{"PID":>7} {"NICE":>5} {"PRI":>4} {"POLICY":<7} {"RTPRI":>5} {"VOL":>6} {"INVOL":>6}')
 
-    filas, columnas = stdscr.getmaxyx()
-    max_filas = max(0, filas - 3)
+    columnas, max_filas, fila_detalle, filas_detalle = _layout(stdscr)
     procesos = list(entrada['datos'].values())[:max_filas]
 
     for i, pr in enumerate(procesos):
@@ -154,6 +190,9 @@ def dibujar_scheduling(stdscr, snapshot, seleccionado=0):
                  f'{pr["rt_priority"]:>5} {pr["voluntary_ctxt_switches"]:>6} '
                  f'{pr["nonvoluntary_ctxt_switches"]:>6}')
         _fila(stdscr, 2 + i, linea[:columnas - 1], i == seleccionado)
+
+    item = procesos[seleccionado] if 0 <= seleccionado < len(procesos) else None
+    _panel_detalle(stdscr, item, fila_detalle, filas_detalle, columnas)
 
     stdscr.refresh()
 
