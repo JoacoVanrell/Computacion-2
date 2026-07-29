@@ -1,7 +1,8 @@
+import curses
 import multiprocessing as mp
-import time
 from analizadores import base, resumen, memoria, fds, threads, senales, scheduling, sistema
 from agregador import loop_agregador
+import display
 
 # (nombre, función recolectora, intervalo default en segundos)
 # Los defaults salen de la tabla de vistas de la consigna.
@@ -47,42 +48,12 @@ def main():
     for p in procesos:
         p.start()
 
-    print(f'proceso principal PID {mp.current_process().pid}')
-    for p in procesos:
-        print(f'{p.name:<20} PID {p.pid}')
-    print()
-
     try:
-        for i in range(6):
-            time.sleep(2)
-
-            entrada = snapshot.get('resumen')
-            if entrada is None:
-                print('todavía no hay datos')
-                continue
-
-            datos = entrada['datos']
-            edad = time.time() - entrada['ts']
-            top = sorted(datos.values(), key=lambda x: x['cpu'], reverse=True)[:8]
-
-            print(f'--- lectura {i}  ({len(datos)} procs, dato de hace {edad:.1f}s) ---')
-            for pr in top:
-                print(f'{pr["pid"]:>7} {pr["estado"]:<2} {pr["cpu"]:>6.1f}% '
-                      f'{pr["rss_kb"]/1024:>7.1f}MB  {pr["comando"][:40]}')
-            print()
-
-            # A mitad de camino aceleramos resumen EN VIVO, para probar
-            # que el intervalo de cada vista es independiente.
-            if i == 2:
-                intervalos['resumen'].value = 0.5
-                print('>>> intervalo de resumen bajado a 0.5s\n')
-
+        curses.wrapper(display.loop_display, snapshot, corriendo)
     finally:
         corriendo.value = False
         for p in procesos:
             p.join(timeout=3)
-        for p in procesos:
-            print(f'{p.name:<20} terminado, exitcode={p.exitcode}')
 
 
 if __name__ == '__main__':
