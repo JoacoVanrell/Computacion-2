@@ -10,7 +10,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import procfs
 
 
-def recolectar(previo):
+def recolectar(previo, pids):
     """
     previo: dict {tid: (jiffies, timestamp)} del ciclo anterior.
             El tid solo alcanza como clave: es único en todo el sistema
@@ -20,7 +20,7 @@ def recolectar(previo):
     datos = {}
     nuevo_previo = {}
 
-    for pid in procfs.listar_pids():
+    for pid in pids:
         tids = procfs.listar_tids(pid)
         if tids is None:
             continue  # el proceso murió entre listar_pids y listar_tids

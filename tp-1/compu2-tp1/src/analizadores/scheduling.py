@@ -9,13 +9,13 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import procfs
 
 
-def recolectar(previo):
+def recolectar(previo, pids):
     """
     Sin estado entre ciclos, igual que memoria/fds/senales.
     """
     datos = {}
 
-    for pid in procfs.listar_pids():
+    for pid in pids:
         st = procfs.leer_stat(pid)
         if st is None:
             continue  # murió entre listar y leer (TOCTOU)

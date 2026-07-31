@@ -14,7 +14,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import procfs
 
 
-def recolectar(previo):
+def recolectar(previo, pids):
     """
     previo: {'jiffies': {...}, 'ts': float} del ciclo anterior, o {}
             en la primera pasada (ahí el CPU% global da 0.0, igual
@@ -42,7 +42,7 @@ def recolectar(previo):
     por_estado = {}
     threads_totales = 0
     zombies = 0
-    for pid in procfs.listar_pids():
+    for pid in pids:
         st = procfs.leer_stat(pid)
         if st is None:
             continue  # murió entre listar y leer (TOCTOU)

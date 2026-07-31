@@ -363,8 +363,48 @@ def dibujar_sistema(stdscr, snapshot, seleccionado=0, criterio_orden='cpu',
     stdscr.addstr(9, 0, 'Por estado: ' + '  '.join(f'{k}={v}' for k, v in d['procesos_por_estado'].items()))
     stdscr.addstr(11, 0, f'Uptime: {d["uptime_seg"] / 3600:.1f} horas')
 
+    # Top 3 CPU/memoria: se calculan acá, no en analizadores/sistema.py,
+    # porque el Display ya lee el snapshot completo (ver README).
+    fila = 13
+    entrada_resumen = snapshot.get('resumen')
+    if entrada_resumen is not None:
+        top_cpu = sorted(entrada_resumen['datos'].values(),
+                          key=lambda x: x['cpu'], reverse=True)[:3]
+        stdscr.addstr(fila, 0, 'Top 3 CPU:')
+        for i, pr in enumerate(top_cpu):
+            stdscr.addstr(fila + 1 + i, 2, f'{pr["pid"]:>7} {pr["cpu"]:>6.1f}%  {pr["comando"][:50]}')
+        fila += 5
+
+    entrada_memoria = snapshot.get('memoria')
+    if entrada_memoria is not None:
+        top_mem = sorted(entrada_memoria['datos'].values(),
+                          key=lambda x: x['vm_rss_kb'], reverse=True)[:3]
+        stdscr.addstr(fila, 0, 'Top 3 memoria (RSS):')
+        for i, pr in enumerate(top_mem):
+            stdscr.addstr(fila + 1 + i, 2, f'{pr["pid"]:>7} {pr["vm_rss_kb"] / 1024:>7.1f}M')
+
     stdscr.refresh()
     return []
+
+
+def dibujar_ayuda(stdscr):
+    stdscr.erase()
+    lineas = [
+        'AYUDA - keybindings',
+        '',
+        '1-7 o r/m/f/t/s/p/g   cambiar de vista',
+        'flechas arriba/abajo  navegar la lista',
+        'Enter                 pin/despin del proceso seleccionado',
+        '/                     filtrar por comando',
+        'u                     filtrar por usuario',
+        'c                     alternar orden (CPU / RSS / PID)',
+        '+ / -                 ajustar intervalo de la vista activa',
+        'q                     salir',
+        'h o ?                 esta ayuda (cualquier tecla para volver)',
+    ]
+    for i, linea in enumerate(lineas):
+        stdscr.addstr(i, 0, linea)
+    stdscr.refresh()
 
 
 # Cada vista se define UNA vez, con sus dos teclas (número y letra)
@@ -399,6 +439,7 @@ def loop_display(stdscr, snapshot, corriendo, intervalos):
     filtro_usuario = ''
     pid_pineado = None
     lista_actual = []
+    mostrando_ayuda = False
 
     while corriendo.value:
         tecla = stdscr.getch()
@@ -406,6 +447,15 @@ def loop_display(stdscr, snapshot, corriendo, intervalos):
         if tecla == ord('q'):
             corriendo.value = False
             break
+        elif mostrando_ayuda:
+            # Con la ayuda en pantalla, cualquier tecla (menos q) vuelve.
+            if tecla != -1:
+                mostrando_ayuda = False
+            continue
+        elif tecla in (ord('h'), ord('?')):
+            mostrando_ayuda = True
+            dibujar_ayuda(stdscr)
+            continue
         elif tecla == curses.KEY_UP:
             seleccionado = max(0, seleccionado - 1)
         elif tecla == curses.KEY_DOWN:

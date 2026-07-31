@@ -10,12 +10,13 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import procfs
 
 
-def recolectar(previo):
+def recolectar(previo, pids):
     """
-    Lee todos los procesos y arma el resumen.
+    Arma el resumen de los procesos que le pasó el recolector.
 
     previo: dict {pid: (jiffies, timestamp)} del ciclo anterior.
             Vacío en la primera pasada -> todos los CPU% dan 0.0.
+    pids  : lista de PIDs vivos, la arma el recolector.
 
     Devuelve (datos, nuevo_previo).
     """
@@ -23,7 +24,7 @@ def recolectar(previo):
     datos = {}
     nuevo_previo = {}
 
-    for pid in procfs.listar_pids():
+    for pid in pids:
         st = procfs.leer_stat(pid)
         if st is None:
             continue  # murió entre listar y leer (TOCTOU)
@@ -50,12 +51,14 @@ def recolectar(previo):
                 cpu = max(0.0, cpu)
 
         uid = int(status.get('Uid', '0').split()[0])
+        gid = int(status.get('Gid', '0').split()[0])
 
         datos[pid] = {
             'pid': pid,
             'ppid': st['ppid'],
             'usuario': procfs.usuario_de_uid(uid),
             'uid': uid,
+            'gid': gid,
             'estado': st['estado'],
             'cpu': round(cpu, 1),
             'rss_kb': procfs.kb(status.get('VmRSS', '0 kB')),

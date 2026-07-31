@@ -5,21 +5,23 @@ Cada analizador corre en su PROPIO proceso, con su propio intervalo.
 import time
 
 
-def loop_analizador(nombre, funcion, queue, intervalo, corriendo):
+def loop_analizador(nombre, funcion, queue, intervalo, corriendo, pids_compartidos):
     """
-    nombre    : clave dentro del snapshot ('resumen', 'memoria', ...)
-    funcion   : recolectar(previo) -> (datos, nuevo_previo)
-    queue     : Queue compartida hacia el agregador (único que escribe el snapshot)
-    intervalo : Value('d') - segundos entre ciclos, ajustable en vivo
-    corriendo : Value('b') - flag de apagado
+    nombre           : clave dentro del snapshot ('resumen', 'memoria', ...)
+    funcion          : recolectar(previo, pids) -> (datos, nuevo_previo)
+    queue            : Queue compartida hacia el agregador (único que escribe el snapshot)
+    intervalo        : Value('d') - segundos entre ciclos, ajustable en vivo
+    corriendo        : Value('b') - flag de apagado
+    pids_compartidos : Manager().dict() que llena el recolector, clave 'pids'
     """
     previo = {}
 
     while corriendo.value:
         inicio = time.time()
+        pids = pids_compartidos.get('pids', [])
 
         try:
-            datos, previo = funcion(previo)
+            datos, previo = funcion(previo, pids)
             queue.put({'nombre': nombre, 'ts': time.time(), 'datos': datos})
         except Exception as e:
             # Si un analizador explota, no debe tumbar el monitor entero.
