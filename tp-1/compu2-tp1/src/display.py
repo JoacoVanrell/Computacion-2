@@ -5,6 +5,13 @@ Process aparte) porque necesita control exclusivo de la terminal.
 import curses
 import time
 
+INTERVALO_MIN = {
+    'resumen': 0.5, 'memoria': 1.0, 'fds': 2.0, 'threads': 0.5,
+    'senales': 5.0, 'scheduling': 5.0, 'sistema': 1.0,
+}
+INTERVALO_MAX = 30.0
+PASO_INTERVALO = 0.5
+
 
 def _sin_datos(stdscr):
     stdscr.erase()
@@ -50,17 +57,82 @@ def _panel_detalle(stdscr, item, fila_inicio, filas_detalle, columnas):
         stdscr.addstr(fila_inicio + i, 0, texto[:columnas - 1])
 
 
-def dibujar_resumen(stdscr, snapshot, seleccionado=0):
+def _aplicar_pin(lista, pid_pineado):
+    """Si el pid pineado está en la lista, lo mueve al principio."""
+    if pid_pineado is None:
+        return lista
+    pineado = next((x for x in lista if x['pid'] == pid_pineado), None)
+    if pineado is None:
+        return lista
+    resto = [x for x in lista if x['pid'] != pid_pineado]
+    return [pineado] + resto
+
+
+def _pids_filtrados(snapshot, filtro_comando, filtro_usuario):
+    """
+    Devuelve un set de PIDs que matchean los filtros activos, o None si
+    no hay ningún filtro (todos pasan). Usa 'resumen' como fuente de
+    comando/usuario porque es la única vista que los tiene -- así el
+    filtro funciona igual en las 7 vistas, aunque su propia data no
+    tenga esos campos.
+    """
+    if not filtro_comando and not filtro_usuario:
+        return None
+
+    entrada = snapshot.get('resumen')
+    if entrada is None:
+        return set()
+
+    resultado = set()
+    for pid, pr in entrada['datos'].items():
+        if filtro_comando and filtro_comando.lower() not in pr['comando'].lower():
+            continue
+        if filtro_usuario and filtro_usuario.lower() not in pr['usuario'].lower():
+            continue
+        resultado.add(pid)
+    return resultado
+
+
+def _pedir_texto(stdscr, prompt):
+    """Pide una línea de texto al usuario, en la última fila de la pantalla."""
+    filas, columnas = stdscr.getmaxyx()
+    stdscr.addstr(filas - 1, 0, prompt)
+    stdscr.clrtoeol()
+    curses.echo()
+    stdscr.nodelay(False)
+    try:
+        texto = stdscr.getstr(filas - 1, len(prompt)).decode('utf-8', errors='replace')
+    finally:
+        stdscr.nodelay(True)
+        curses.noecho()
+    return texto.strip()
+
+
+def dibujar_resumen(stdscr, snapshot, seleccionado=0, criterio_orden='cpu',
+                     pids_filtrados=None, pid_pineado=None):
     entrada = snapshot.get('resumen')
     stdscr.erase()
     if entrada is None:
-        return _sin_datos(stdscr)
+        _sin_datos(stdscr)
+        return []
 
     _encabezado(stdscr, entrada, 'RESUMEN')
     stdscr.addstr(1, 0, f'{"PID":>7} {"ST":<2} {"CPU%":>6} {"RSS":>8}  COMANDO')
 
     columnas, max_filas, fila_detalle, filas_detalle = _layout(stdscr)
-    top = sorted(entrada['datos'].values(), key=lambda x: x['cpu'], reverse=True)[:max_filas]
+
+    valores = [p for p in entrada['datos'].values()
+               if pids_filtrados is None or p['pid'] in pids_filtrados]
+
+    if criterio_orden == 'pid':
+        valores.sort(key=lambda x: x['pid'])
+    elif criterio_orden == 'rss':
+        valores.sort(key=lambda x: x['rss_kb'], reverse=True)
+    else:
+        valores.sort(key=lambda x: x['cpu'], reverse=True)
+
+    valores = _aplicar_pin(valores, pid_pineado)
+    top = valores[:max_filas]
 
     for i, pr in enumerate(top):
         linea = (f'{pr["pid"]:>7} {pr["estado"]:<2} {pr["cpu"]:>6.1f} '
@@ -71,19 +143,33 @@ def dibujar_resumen(stdscr, snapshot, seleccionado=0):
     _panel_detalle(stdscr, item, fila_detalle, filas_detalle, columnas)
 
     stdscr.refresh()
+    return top
 
 
-def dibujar_memoria(stdscr, snapshot, seleccionado=0):
+def dibujar_memoria(stdscr, snapshot, seleccionado=0, criterio_orden='cpu',
+                     pids_filtrados=None, pid_pineado=None):
     entrada = snapshot.get('memoria')
     stdscr.erase()
     if entrada is None:
-        return _sin_datos(stdscr)
+        _sin_datos(stdscr)
+        return []
 
     _encabezado(stdscr, entrada, 'MEMORIA')
     stdscr.addstr(1, 0, f'{"PID":>7} {"RSS":>8} {"VMSIZE":>9} {"HEAP":>7} {"STACK":>7}')
 
     columnas, max_filas, fila_detalle, filas_detalle = _layout(stdscr)
-    top = sorted(entrada['datos'].values(), key=lambda x: x['vm_rss_kb'], reverse=True)[:max_filas]
+
+    valores = [p for p in entrada['datos'].values()
+               if pids_filtrados is None or p['pid'] in pids_filtrados]
+
+    # Memoria no tiene CPU%: 'cpu' y 'rss' apuntan a lo mismo (vm_rss_kb).
+    if criterio_orden == 'pid':
+        valores.sort(key=lambda x: x['pid'])
+    else:
+        valores.sort(key=lambda x: x['vm_rss_kb'], reverse=True)
+
+    valores = _aplicar_pin(valores, pid_pineado)
+    top = valores[:max_filas]
 
     for i, pr in enumerate(top):
         heap = pr['segmentos'].get('heap', 0)
@@ -96,19 +182,34 @@ def dibujar_memoria(stdscr, snapshot, seleccionado=0):
     _panel_detalle(stdscr, item, fila_detalle, filas_detalle, columnas)
 
     stdscr.refresh()
+    return top
 
 
-def dibujar_fds(stdscr, snapshot, seleccionado=0):
+def dibujar_fds(stdscr, snapshot, seleccionado=0, criterio_orden='cpu',
+                 pids_filtrados=None, pid_pineado=None):
     entrada = snapshot.get('fds')
     stdscr.erase()
     if entrada is None:
-        return _sin_datos(stdscr)
+        _sin_datos(stdscr)
+        return []
 
     _encabezado(stdscr, entrada, 'FILE DESCRIPTORS')
     stdscr.addstr(1, 0, f'{"PID":>7} {"FDS":>5}  TIPOS (primeros 5)')
 
     columnas, max_filas, fila_detalle, filas_detalle = _layout(stdscr)
-    top = sorted(entrada['datos'].values(), key=lambda x: x['cantidad'], reverse=True)[:max_filas]
+
+    valores = [p for p in entrada['datos'].values()
+               if pids_filtrados is None or p['pid'] in pids_filtrados]
+
+    # FDs no tiene CPU% ni RSS: 'pid' ordena por pid, cualquier otro
+    # criterio deja el orden natural (cantidad de FDs, descendente).
+    if criterio_orden == 'pid':
+        valores.sort(key=lambda x: x['pid'])
+    else:
+        valores.sort(key=lambda x: x['cantidad'], reverse=True)
+
+    valores = _aplicar_pin(valores, pid_pineado)
+    top = valores[:max_filas]
 
     for i, pr in enumerate(top):
         tipos = ', '.join(f['tipo'] for f in pr['fds'][:5])
@@ -119,17 +220,22 @@ def dibujar_fds(stdscr, snapshot, seleccionado=0):
     _panel_detalle(stdscr, item, fila_detalle, filas_detalle, columnas)
 
     stdscr.refresh()
+    return top
 
 
-def dibujar_threads(stdscr, snapshot, seleccionado=0):
+def dibujar_threads(stdscr, snapshot, seleccionado=0, criterio_orden='cpu',
+                     pids_filtrados=None, pid_pineado=None):
     entrada = snapshot.get('threads')
     stdscr.erase()
     if entrada is None:
-        return _sin_datos(stdscr)
+        _sin_datos(stdscr)
+        return []
 
     # 'datos' acá es {pid: {tid: {...}}} -- lo aplanamos a una lista de threads.
     filas_threads = []
     for pid, threads in entrada['datos'].items():
+        if pids_filtrados is not None and pid not in pids_filtrados:
+            continue
         for t in threads.values():
             filas_threads.append({**t, 'pid': pid})
 
@@ -138,7 +244,14 @@ def dibujar_threads(stdscr, snapshot, seleccionado=0):
     stdscr.addstr(1, 0, f'{"PID":>7} {"TID":>7} {"ST":<2} {"CPU%":>6}  NOMBRE')
 
     columnas, max_filas, fila_detalle, filas_detalle = _layout(stdscr)
-    top = sorted(filas_threads, key=lambda x: x['cpu'], reverse=True)[:max_filas]
+
+    if criterio_orden == 'pid':
+        filas_threads.sort(key=lambda x: x['pid'])
+    else:
+        filas_threads.sort(key=lambda x: x['cpu'], reverse=True)
+
+    filas_threads = _aplicar_pin(filas_threads, pid_pineado)
+    top = filas_threads[:max_filas]
 
     for i, t in enumerate(top):
         linea = f'{t["pid"]:>7} {t["tid"]:>7} {t["estado"]:<2} {t["cpu"]:>6.1f}  {t["nombre"]}'
@@ -148,19 +261,32 @@ def dibujar_threads(stdscr, snapshot, seleccionado=0):
     _panel_detalle(stdscr, item, fila_detalle, filas_detalle, columnas)
 
     stdscr.refresh()
+    return top
 
 
-def dibujar_senales(stdscr, snapshot, seleccionado=0):
+def dibujar_senales(stdscr, snapshot, seleccionado=0, criterio_orden='cpu',
+                     pids_filtrados=None, pid_pineado=None):
     entrada = snapshot.get('senales')
     stdscr.erase()
     if entrada is None:
-        return _sin_datos(stdscr)
+        _sin_datos(stdscr)
+        return []
 
     _encabezado(stdscr, entrada, 'SEÑALES')
     stdscr.addstr(1, 0, f'{"PID":>7} {"BLOQ":>4} {"IGN":>4} {"HDLR":>4} {"PEND":>4}')
 
     columnas, max_filas, fila_detalle, filas_detalle = _layout(stdscr)
-    procesos = list(entrada['datos'].values())[:max_filas]
+
+    valores = [p for p in entrada['datos'].values()
+               if pids_filtrados is None or p['pid'] in pids_filtrados]
+
+    # Señales no tiene CPU% ni RSS: solo 'pid' cambia el orden acá,
+    # el resto deja el orden natural del snapshot.
+    if criterio_orden == 'pid':
+        valores.sort(key=lambda x: x['pid'])
+
+    valores = _aplicar_pin(valores, pid_pineado)
+    procesos = valores[:max_filas]
 
     for i, pr in enumerate(procesos):
         linea = (f'{pr["pid"]:>7} {len(pr["bloqueadas"]):>4} {len(pr["ignoradas"]):>4} '
@@ -171,19 +297,31 @@ def dibujar_senales(stdscr, snapshot, seleccionado=0):
     _panel_detalle(stdscr, item, fila_detalle, filas_detalle, columnas)
 
     stdscr.refresh()
+    return procesos
 
 
-def dibujar_scheduling(stdscr, snapshot, seleccionado=0):
+def dibujar_scheduling(stdscr, snapshot, seleccionado=0, criterio_orden='cpu',
+                        pids_filtrados=None, pid_pineado=None):
     entrada = snapshot.get('scheduling')
     stdscr.erase()
     if entrada is None:
-        return _sin_datos(stdscr)
+        _sin_datos(stdscr)
+        return []
 
     _encabezado(stdscr, entrada, 'SCHEDULING')
     stdscr.addstr(1, 0, f'{"PID":>7} {"NICE":>5} {"PRI":>4} {"POLICY":<7} {"RTPRI":>5} {"VOL":>6} {"INVOL":>6}')
 
     columnas, max_filas, fila_detalle, filas_detalle = _layout(stdscr)
-    procesos = list(entrada['datos'].values())[:max_filas]
+
+    valores = [p for p in entrada['datos'].values()
+               if pids_filtrados is None or p['pid'] in pids_filtrados]
+
+    # Mismo caso que señales: sin CPU%/RSS propios.
+    if criterio_orden == 'pid':
+        valores.sort(key=lambda x: x['pid'])
+
+    valores = _aplicar_pin(valores, pid_pineado)
+    procesos = valores[:max_filas]
 
     for i, pr in enumerate(procesos):
         linea = (f'{pr["pid"]:>7} {pr["nice"]:>5} {pr["priority"]:>4} {pr["policy"]:<7} '
@@ -195,13 +333,16 @@ def dibujar_scheduling(stdscr, snapshot, seleccionado=0):
     _panel_detalle(stdscr, item, fila_detalle, filas_detalle, columnas)
 
     stdscr.refresh()
+    return procesos
 
 
-def dibujar_sistema(stdscr, snapshot, seleccionado=0):
+def dibujar_sistema(stdscr, snapshot, seleccionado=0, criterio_orden='cpu',
+                     pids_filtrados=None, pid_pineado=None):
     entrada = snapshot.get('sistema')
     stdscr.erase()
     if entrada is None:
-        return _sin_datos(stdscr)
+        _sin_datos(stdscr)
+        return []
 
     d = entrada['datos']
     edad = time.time() - entrada['ts']
@@ -223,11 +364,13 @@ def dibujar_sistema(stdscr, snapshot, seleccionado=0):
     stdscr.addstr(11, 0, f'Uptime: {d["uptime_seg"] / 3600:.1f} horas')
 
     stdscr.refresh()
+    return []
 
 
 # Cada vista se define UNA vez, con sus dos teclas (número y letra)
 # juntas. TECLAS_VISTA se arma expandiendo esa lista, para no repetir
-# cada vista dos veces.
+# cada vista dos veces. Guarda (nombre, función): el nombre hace falta
+# para saber a qué Value de intervalo le pega +/-.
 VISTAS = [
     ('resumen', ('1', 'r'), dibujar_resumen),
     ('memoria', ('2', 'm'), dibujar_memoria),
@@ -241,16 +384,21 @@ VISTAS = [
 TECLAS_VISTA = {}
 for _nombre, _teclas, _funcion in VISTAS:
     for _tecla in _teclas:
-        TECLAS_VISTA[_tecla] = _funcion
+        TECLAS_VISTA[_tecla] = (_nombre, _funcion)
 
 
-def loop_display(stdscr, snapshot, corriendo):
+def loop_display(stdscr, snapshot, corriendo, intervalos):
     curses.curs_set(0)       # oculta el cursor
     stdscr.nodelay(True)     # getch() no bloquea
     stdscr.timeout(200)      # espera hasta 200ms por una tecla
 
-    vista_activa = dibujar_resumen
+    nombre_activo, vista_activa = 'resumen', dibujar_resumen
     seleccionado = 0
+    criterio_orden = 'cpu'
+    filtro_comando = ''
+    filtro_usuario = ''
+    pid_pineado = None
+    lista_actual = []
 
     while corriendo.value:
         tecla = stdscr.getch()
@@ -262,10 +410,30 @@ def loop_display(stdscr, snapshot, corriendo):
             seleccionado = max(0, seleccionado - 1)
         elif tecla == curses.KEY_DOWN:
             seleccionado += 1
+        elif tecla in (10, 13, curses.KEY_ENTER):
+            if 0 <= seleccionado < len(lista_actual):
+                pid = lista_actual[seleccionado]['pid']
+                pid_pineado = None if pid_pineado == pid else pid
+                seleccionado = 0  # el pineado siempre queda en la fila 0
+        elif tecla == ord('c'):
+            ciclo = ['cpu', 'rss', 'pid']
+            criterio_orden = ciclo[(ciclo.index(criterio_orden) + 1) % len(ciclo)]
+        elif tecla == ord('+'):
+            v = intervalos[nombre_activo]
+            v.value = min(INTERVALO_MAX, v.value + PASO_INTERVALO)
+        elif tecla == ord('-'):
+            v = intervalos[nombre_activo]
+            v.value = max(INTERVALO_MIN[nombre_activo], v.value - PASO_INTERVALO)
+        elif tecla == ord('/'):
+            filtro_comando = _pedir_texto(stdscr, 'Filtrar por comando: ')
+        elif tecla == ord('u'):
+            filtro_usuario = _pedir_texto(stdscr, 'Filtrar por usuario: ')
         elif tecla != -1:
             caracter = chr(tecla) if 0 <= tecla < 256 else ''
             if caracter in TECLAS_VISTA:
-                vista_activa = TECLAS_VISTA[caracter]
-                seleccionado = 0  # se resetea al cambiar de vista
+                nombre_activo, vista_activa = TECLAS_VISTA[caracter]
+                seleccionado = 0
 
-        vista_activa(stdscr, snapshot, seleccionado)
+        pids_filtrados = _pids_filtrados(snapshot, filtro_comando, filtro_usuario)
+        lista_actual = vista_activa(stdscr, snapshot, seleccionado, criterio_orden,
+                                     pids_filtrados, pid_pineado)

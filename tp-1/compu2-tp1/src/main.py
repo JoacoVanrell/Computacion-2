@@ -49,7 +49,7 @@ def main():
         p.start()
 
     try:
-        curses.wrapper(display.loop_display, snapshot, corriendo)
+        curses.wrapper(display.loop_display, snapshot, corriendo, intervalos)
     finally:
         corriendo.value = False
         for p in procesos:
