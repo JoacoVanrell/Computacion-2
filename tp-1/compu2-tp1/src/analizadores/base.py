@@ -2,6 +2,7 @@
 Loop genérico de analizador.
 Cada analizador corre en su PROPIO proceso, con su propio intervalo.
 """
+import signal
 import time
 
 
@@ -14,6 +15,13 @@ def loop_analizador(nombre, funcion, queue, intervalo, corriendo, pids_compartid
     corriendo        : Value('b') - flag de apagado
     pids_compartidos : Manager().dict() que llena el recolector, clave 'pids'
     """
+    # Ctrl+C manda SIGINT a TODO el grupo de procesos de la terminal, no
+    # solo al principal. Si este hijo no la ignora, Python le tira
+    # KeyboardInterrupt en medio del sleep y crashea por su cuenta, antes
+    # de que el apagado coordinado (corriendo.value) llegue a tiempo. Solo
+    # el proceso principal maneja SIGINT (self-pipe, src/senales.py).
+    signal.signal(signal.SIGINT, signal.SIG_IGN)
+
     previo = {}
 
     while corriendo.value:

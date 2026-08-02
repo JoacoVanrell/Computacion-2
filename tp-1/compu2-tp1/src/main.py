@@ -3,6 +3,7 @@ import multiprocessing as mp
 from analizadores import base, resumen, memoria, fds, threads, senales, scheduling, sistema
 from agregador import loop_agregador
 from recolector import loop_recolector
+import senales as senales_monitor  
 import display
 
 # (nombre, función recolectora, intervalo default en segundos)
@@ -60,8 +61,14 @@ def main():
     for p in procesos:
         p.start()
 
+    # Se instala DESPUÉS de p.start(): así los hijos ya se forkearon con
+    # la disposición de señal por default, sin heredar este pipe ni los
+    # handlers -- si alguien manda una señal a un hijo puntual, no debería
+    # terminar escribiendo en el mismo pipe que el proceso principal.
+    fd_senales = senales_monitor.instalar()
+
     try:
-        curses.wrapper(display.loop_display, snapshot, corriendo, intervalos)
+        curses.wrapper(display.loop_display, snapshot, corriendo, intervalos, fd_senales)
     finally:
         corriendo.value = False
         for p in procesos:

@@ -2,6 +2,7 @@
 Recolector: lista los PIDs vivos vía /proc y se los pasa a los 7
 analizadores, para que ninguno tenga que listar /proc por su cuenta.
 """
+import signal
 import time
 import procfs
 
@@ -16,6 +17,10 @@ def loop_recolector(pids_compartidos, corriendo, intervalo=1.0):
     intervalo         : no es ajustable en vivo (no es una de las 7
                         vistas), listar PIDs es barato.
     """
+    # Mismo motivo que en base.py: Ctrl+C llega a todo el grupo de
+    # procesos, no solo al principal. Solo él maneja SIGINT.
+    signal.signal(signal.SIGINT, signal.SIG_IGN)
+
     while corriendo.value:
         inicio = time.time()
 
