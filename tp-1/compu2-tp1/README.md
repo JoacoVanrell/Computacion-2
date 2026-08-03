@@ -346,5 +346,8 @@ aparte, competiría por la TTY con el proceso principal.
 
 ## Lo que aprendí
 
-*(completar con 2-3 párrafos personales — qué te sorprendió, qué te costó
-entender, qué cambiarías si lo rehicieras)*
+Lo que más me costó entender al principio fue por qué un Manager().dict() no es simplemente "una variable compartida" — cuando entendí que snapshot[clave] en realidad te devuelve una copia que viajó por pickle, y no una referencia al original, un montón de decisiones de diseño del código empezaron a tener sentido (como por qué siempre reemplazo la clave entera en vez de mutar algo ya guardado).
+
+Una de las partes más entretenidas fue decodificar las máscaras de señales bit a bit — nunca había pensado las señales como un número binario donde cada posición significa algo puntual.
+
+Lo que más me sorprendió fue un bug que encontré casi al final: pensé que con corriendo.value = False ya tenía el apagado resuelto, pero Ctrl+C manda la señal a todos los procesos a la vez, no solo al principal, y mis analizadores crasheaban por su cuenta antes de que mi lógica "prolija" llegara a actuar. Me hizo entender que el manejo de señales en un sistema con varios procesos no es solo "atajar la señal en algún lado", sino pensar bien QUIÉN la recibe y por qué.
