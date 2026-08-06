@@ -10,3 +10,7 @@ __pycache__/
 
 # OS
 .DS_Store
+
+#archivos de estudio
+mapa_codigo_defensa.md
+prompt_estudio_defensa.md

@@ -10,6 +10,7 @@
 ## Estructura
 
 - `bloque_0/` - Ejercicios del bloque autónomo
+- `clases-x `
 - `tp1/` - Trabajo Práctico 1
 - `tp2/` - Trabajo Práctico 2
 
@@ -17,6 +18,6 @@
 
 | Componente | Estado |
 |------------|--------|
-| Bloque 0   | Pendiente |
-| TP1        | Pendiente |
+| Bloque 0   | Hecho |
+| TP1        | Hecho |
 | TP2        | Pendiente |
