@@ -11,7 +11,7 @@ analizadores independientes, un agregador y una TUI en `curses`.
 ### Cómo correr y testear
 
 ```bash
-cd tp-1/compu2-tp1
+cd tp-1
 docker compose run --rm monitor
 ```
 

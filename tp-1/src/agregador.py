@@ -4,7 +4,6 @@ Los analizadores mandan sus resultados por Queue en vez de tocar
 el snapshot directamente.
 """
 import signal
-import time
 from queue import Empty
 
 
