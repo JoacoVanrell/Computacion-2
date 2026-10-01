@@ -14,3 +14,10 @@ __pycache__/
 #archivos de estudio
 mapa_codigo_defensa.md
 prompt_estudio_defensa.md
+.venv/
+*.pyo
+*.code-workspace
+Thumbs.db
+*.swp
+*~
+.~lock.*
