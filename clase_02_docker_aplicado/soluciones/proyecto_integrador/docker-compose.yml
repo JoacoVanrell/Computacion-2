@@ -1,0 +1,30 @@
+# Clase 2 · Ejercicio 5: proyecto integrador (web + redis + worker)
+#   docker compose up --build      → abrir http://localhost:8000
+#   docker compose down            → el contador SOBREVIVE (volumen redis-data)
+#   docker compose down -v         → borra también el volumen (vuelve a 0)
+services:
+  web:
+    build: ./web
+    ports:
+      - "8000:8000"          # host:contenedor → para entrar desde tu navegador
+    environment:
+      - REDIS_HOST=redis     # "redis" = nombre del servicio, Compose hace el DNS
+    depends_on:
+      - redis
+
+  worker:
+    build: ./worker
+    environment:
+      - REDIS_HOST=redis
+      - INTERVALO=1
+    depends_on:
+      - redis
+
+  redis:
+    image: redis:alpine
+    command: redis-server --appendonly yes   # guarda en disco cada escritura
+    volumes:
+      - redis-data:/data                     # named volume = persistencia
+
+volumes:
+  redis-data:
