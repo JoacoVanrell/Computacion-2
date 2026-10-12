@@ -14,6 +14,7 @@ __pycache__/
 #archivos de estudio
 mapa_codigo_defensa.md
 prompt_estudio_defensa.md
+PLAN.md
 .venv/
 *.pyo
 *.code-workspace

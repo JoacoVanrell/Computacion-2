@@ -12,7 +12,7 @@ import random
 import time
 
 TAREAS = 12
-LIMITE = 4
+LIMITE = 6
 
 
 async def bajar(nombre, demora):
@@ -86,7 +86,7 @@ async def main():
         ('secuencial            ', secuencial(trabajos)),
         ('gather (todas juntas) ', concurrente(trabajos)),
         (f'con semáforo de {LIMITE}     ', con_limite(trabajos, LIMITE)),
-        ('con timeout de 0.8s   ', con_timeout(trabajos, 0.8)),
+        ('con timeout de 0.5s   ', con_timeout(trabajos, 0.5)),
     ]:
         t0 = time.perf_counter()
         resultados = await corrutina
