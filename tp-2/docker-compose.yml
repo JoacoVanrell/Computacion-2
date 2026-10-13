@@ -1,0 +1,8 @@
+services:
+  api:
+    build: .
+    container_name: compu2-tareas
+
+    # puerto del host : puerto del contenedor
+    ports:
+      - "8000:8000"
