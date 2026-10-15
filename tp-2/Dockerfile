@@ -2,6 +2,10 @@ FROM python:3.11-slim
 
 WORKDIR /app
 
+# Sin buffering en stdout: si no, los print() no aparecen en `docker compose logs`
+# hasta que se junta un bloque (es el -u del TP1).
+ENV PYTHONUNBUFFERED=1
+
 # Primero las dependencias: si solo cambia el código, esta capa se reusa.
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt

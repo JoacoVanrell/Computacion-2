@@ -6,12 +6,38 @@ Uso (parado en tp-2/):
 Después:
     http://localhost:8000/docs
 """
+import asyncio
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI
 
+from app import config
 from app.rutas import router
+from app.workers import worker
+
+
+@asynccontextmanager
+async def ciclo_de_vida(app: FastAPI):
+    # --- al arrancar, antes de atender el primer pedido ---
+    app.state.cola = asyncio.Queue(maxsize=config.MAXSIZE_COLA)
+    app.state.workers = [asyncio.create_task(worker(app.state.cola, i))
+                         for i in range(config.WORKERS)]
+    print(f'{config.WORKERS} workers esperando tareas '
+          f'(cola de {config.MAXSIZE_COLA} lugares)')
+
+    yield                                  # acá el servidor atiende
+
+    # --- al apagar ---
+    # Por ahora como en cola.py: cancelarlos. El apagado ordenado
+    # con centinela va en T8.
+    for w in app.state.workers:
+        w.cancel()
+    await asyncio.gather(*app.state.workers, return_exceptions=True)
+
 
 app = FastAPI(
     title='Plataforma de tareas',
     description='TP2 de Computación II',
+    lifespan=ciclo_de_vida,
 )
 app.include_router(router)

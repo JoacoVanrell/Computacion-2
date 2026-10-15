@@ -1,8 +1,9 @@
 """Los 5 endpoints de la API."""
+import asyncio
 from datetime import datetime
 from typing import get_args
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, HTTPException, Query, Request
 
 from app import config, estado
 from app.modelos import Estado, Tarea, TareaNueva
@@ -20,8 +21,8 @@ def buscar(tarea_id: int) -> Tarea:
 
 
 @router.post('/tareas', response_model=Tarea, status_code=201)
-async def crear(nueva: TareaNueva):
-    """Responde enseguida: la tarea queda pendiente, no se ejecuta acá."""
+async def crear(nueva: TareaNueva, request: Request):
+    """Responde enseguida: encola el id y vuelve, no ejecuta la tarea."""
     tarea = Tarea(
         id=estado.nuevo_id(),
         tipo=nueva.tipo,
@@ -29,8 +30,14 @@ async def crear(nueva: TareaNueva):
         timeout=nueva.timeout or config.TIMEOUT_DEFECTO,
         creada=datetime.now(),
     )
+    try:
+        request.app.state.cola.put_nowait(tarea.id)    # no espera: si está llena, falla
+    except asyncio.QueueFull:
+        raise HTTPException(status_code=503,
+                            detail='La cola está llena, probá más tarde')
+    # Entre el put y esta línea no hay await: ningún worker puede
+    # sacar el id antes de que la tarea esté en el dict.
     estado.tareas[tarea.id] = tarea
-    # TODO: encolar la tarea (todavía no hay cola ni workers)
     return tarea
 
 
