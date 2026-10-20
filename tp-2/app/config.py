@@ -9,3 +9,10 @@ WORKERS = int(os.environ.get('WORKERS', '4'))
 
 # Lugares en la cola. Si se llena, el POST responde 503.
 MAXSIZE_COLA = int(os.environ.get('MAXSIZE_COLA', '100'))
+
+# Procesos del pool para hashear. Por defecto, uno por núcleo.
+PROCESOS = int(os.environ.get('PROCESOS', os.cpu_count()))
+
+# 1 = hashear en el ProcessPoolExecutor (lo correcto).
+# 0 = hashear dentro del event loop, para la medición 2.
+USAR_EXECUTOR = os.environ.get('USAR_EXECUTOR', '1') == '1'

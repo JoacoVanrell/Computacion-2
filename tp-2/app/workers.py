@@ -1,12 +1,13 @@
 """Bucle del worker: get -> ejecutar con timeout -> task_done."""
 import asyncio
+from concurrent.futures import ProcessPoolExecutor
 from datetime import datetime
 
 from app import estado
 from app.tareas import ejecutar
 
 
-async def worker(cola: asyncio.Queue, wid: int):
+async def worker(cola: asyncio.Queue, wid: int, pool: ProcessPoolExecutor):
     """Bucle infinito: saca ids de la cola hasta que lo cancelen.
 
     Por la cola viaja solo el id; la tarea vive en estado.tareas.
@@ -24,7 +25,7 @@ async def worker(cola: asyncio.Queue, wid: int):
             tarea.iniciada = datetime.now()
             print(f'worker {wid}: ejecuto la tarea {tarea_id} ({tarea.tipo})')
 
-            tarea.resultado = await ejecutar(tarea)     # TODO (T7): timeout
+            tarea.resultado = await ejecutar(tarea, pool)   # TODO (T7): timeout
 
             tarea.estado = 'completada'
             tarea.terminada = datetime.now()

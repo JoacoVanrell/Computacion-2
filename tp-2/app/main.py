@@ -7,6 +7,7 @@ Después:
     http://localhost:8000/docs
 """
 import asyncio
+from concurrent.futures import ProcessPoolExecutor
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
@@ -20,10 +21,16 @@ from app.workers import worker
 async def ciclo_de_vida(app: FastAPI):
     # --- al arrancar, antes de atender el primer pedido ---
     app.state.cola = asyncio.Queue(maxsize=config.MAXSIZE_COLA)
-    app.state.workers = [asyncio.create_task(worker(app.state.cola, i))
-                         for i in range(config.WORKERS)]
+    # El pool se crea UNA vez: crear procesos es caro, así se reusan.
+    app.state.pool = ProcessPoolExecutor(max_workers=config.PROCESOS)
+    app.state.workers = [
+        asyncio.create_task(worker(app.state.cola, i, app.state.pool))
+        for i in range(config.WORKERS)
+    ]
     print(f'{config.WORKERS} workers esperando tareas '
-          f'(cola de {config.MAXSIZE_COLA} lugares)')
+          f'(cola de {config.MAXSIZE_COLA} lugares, '
+          f'{config.PROCESOS} procesos para hashear, '
+          f'executor {"SÍ" if config.USAR_EXECUTOR else "NO"})')
 
     yield                                  # acá el servidor atiende
 
@@ -33,6 +40,7 @@ async def ciclo_de_vida(app: FastAPI):
     for w in app.state.workers:
         w.cancel()
     await asyncio.gather(*app.state.workers, return_exceptions=True)
+    app.state.pool.shutdown()
 
 
 app = FastAPI(

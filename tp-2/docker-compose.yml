@@ -6,3 +6,9 @@ services:
     # puerto del host : puerto del contenedor
     ports:
       - "8000:8000"
+
+    # Se leen en app/config.py. Cambiar acá y volver a levantar.
+    environment:
+      WORKERS: "4"
+      MAXSIZE_COLA: "100"
+      USAR_EXECUTOR: "1"     # 0 = hashear dentro del loop (para la medición 2)
