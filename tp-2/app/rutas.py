@@ -64,7 +64,17 @@ async def cancelar(tarea_id: int):
     if tarea.estado in TERMINADOS:
         raise HTTPException(status_code=409,
                             detail=f'La tarea ya está {tarea.estado}')
-    # TODO: si está ejecutando, cancelar también su Task
+    if tarea.estado == 'ejecutando':
+        trabajo = estado.en_curso[tarea_id]
+        if trabajo.done():
+            # Terminó recién y el worker todavía no anotó el resultado.
+            raise HTTPException(status_code=409,
+                                detail='La tarea ya está terminando')
+        # Le tira CancelledError en el await donde esté esperando.
+        trabajo.cancel()
+    # Si está pendiente, alcanza con el cartel: el worker la va a saltear.
+    # Entre el cancel() y estas líneas no hay await: el worker recién se
+    # entera después, y ya encuentra el estado en 'cancelada'.
     tarea.estado = 'cancelada'
     tarea.terminada = datetime.now()
 
