@@ -6,7 +6,7 @@ from typing import get_args
 from fastapi import APIRouter, HTTPException, Query, Request
 
 from app import config, estado
-from app.modelos import Estado, Tarea, TareaNueva
+from app.modelos import Estado, Tarea, TareaNueva, Tipo
 
 router = APIRouter()
 
@@ -82,11 +82,22 @@ async def cancelar(tarea_id: int):
 @router.get('/estadisticas')
 async def estadisticas():
     por_estado = {e: 0 for e in get_args(Estado)}
+    duraciones = {t: [] for t in get_args(Tipo)}
     for tarea in estado.tareas.values():
         por_estado[tarea.estado] += 1
+        if tarea.estado == 'completada':
+            segundos = (tarea.terminada - tarea.iniciada).total_seconds()
+            duraciones[tarea.tipo].append(segundos)
     return {
         'total': len(estado.tareas),
         'por_estado': por_estado,
-        'tiempo_promedio': None,        # TODO: cuando haya tareas terminadas
-        'workers_ocupados': 0,          # TODO: cuando haya workers
+        # Cuánto tarda en ejecutarse, en promedio, una tarea completada de
+        # cada tipo (desde que un worker la toma hasta que termina).
+        'tiempo_promedio_s': {
+            tipo: round(sum(d) / len(d), 3) if d else None
+            for tipo, d in duraciones.items()
+        },
+        # Cada tarea en ejecución ocupa a un worker.
+        'workers_ocupados': len(estado.en_curso),
+        'workers_total': config.WORKERS,
     }

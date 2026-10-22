@@ -9,6 +9,8 @@ from datetime import datetime
 from app import estado
 from app.tareas import ejecutar
 
+CENTINELA = object()          # marca de "no hay más trabajo" (clase 21)
+
 
 async def worker(cola: asyncio.Queue, wid: int, pool: ProcessPoolExecutor):
     """Bucle infinito: saca ids de la cola hasta que lo cancelen.
@@ -17,6 +19,11 @@ async def worker(cola: asyncio.Queue, wid: int, pool: ProcessPoolExecutor):
     """
     while True:
         tarea_id = await cola.get()
+        if tarea_id is CENTINELA:
+            # Apagado ordenado: no hay más trabajo para mí.
+            cola.task_done()
+            print(f'worker {wid}: me retiro')
+            return
         tarea = estado.tareas[tarea_id]
         try:
             if tarea.estado == 'cancelada':
