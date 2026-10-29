@@ -17,6 +17,10 @@ PROCESOS = int(os.environ.get('PROCESOS', os.cpu_count()))
 # 0 = hashear dentro del event loop, para la medición 2.
 USAR_EXECUTOR = os.environ.get('USAR_EXECUTOR', '1') == '1'
 
+# 0 = descargar las URLs con gather (lo correcto).
+# 1 = una atrás de la otra con for + await, para la medición 1.
+DESCARGA_SECUENCIAL = os.environ.get('DESCARGA_SECUENCIAL', '0') == '1'
+
 # Cuánto esperar, al apagar, a que terminen las tareas en curso.
 # Tiene que ser MENOR que los 10 s que da Docker antes de matar el
 # proceso, para que quede tiempo de escribir el JSON.

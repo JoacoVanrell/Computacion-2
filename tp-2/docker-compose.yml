@@ -7,18 +7,32 @@ services:
     ports:
       - "8000:8000"
 
-    # Se leen en app/config.py. Cambiar acá y volver a levantar.
+    # Se leen en app/config.py. ${VAR:-valor}: si la variable no está
+    # definida al levantar, usa el valor por defecto. Así se puede cambiar
+    # sin tocar este archivo, por ejemplo:  USAR_EXECUTOR=0 docker compose up -d
     environment:
-      WORKERS: "4"
-      MAXSIZE_COLA: "100"
-      USAR_EXECUTOR: "1"     # 0 = hashear dentro del loop (para la medición 2)
+      WORKERS: "${WORKERS:-4}"
+      MAXSIZE_COLA: "${MAXSIZE_COLA:-100}"
+      USAR_EXECUTOR: "${USAR_EXECUTOR:-1}"              # 0 = hashear dentro del loop (medición 2)
+      DESCARGA_SECUENCIAL: "${DESCARGA_SECUENCIAL:-0}"  # 1 = descargar con for + await (medición 1)
       LIMITE_APAGADO: "5"    # menor que stop_grace_period: queda tiempo para el JSON
       DIR_ESTADOS: "/app/estados"
 
-    # Los estado_<timestamp>.json quedan en tu máquina, no mueren con el contenedor.
     volumes:
+      # Los estado_<timestamp>.json quedan en tu máquina, no mueren con el contenedor.
       - ./estados:/app/estados
+      # Los scripts de medición, para correrlos adentro con `docker compose exec`.
+      - ./mediciones:/app/mediciones
 
     # Lo que Docker espera después del SIGTERM antes de mandar SIGKILL.
     # (10 s es el valor por defecto; lo dejo escrito para que se vea.)
     stop_grace_period: 10s
+
+  # Servidor de prueba para las mediciones: /demora/X responde a los X
+  # segundos. Así los números no dependen de internet y se pueden repetir.
+  lento:
+    image: python:3.11-slim
+    container_name: compu2-lento
+    command: ["python", "-u", "/srv/servidor_lento.py"]
+    volumes:
+      - ./mediciones/servidor_lento.py:/srv/servidor_lento.py:ro

@@ -28,11 +28,21 @@ async def descargar(urls: list[str]) -> list[dict]:
     # UN cliente para todas las URLs: reusa las conexiones (keep-alive, clase 19).
     async with httpx.AsyncClient(timeout=TIMEOUT_URL,
                                  follow_redirects=True) as cliente:
-        # gather: todas a la vez, tarda lo que la más lenta (clase 20).
-        # return_exceptions=True: una URL rota vuelve como un valor más
-        # en la lista, en vez de explotar y perder los resultados de las otras.
-        resultados = await asyncio.gather(*(bajar(cliente, u) for u in urls),
-                                          return_exceptions=True)
+        if config.DESCARGA_SECUENCIAL:
+            # MAL a propósito, solo para la medición 1: una atrás de la
+            # otra con un for + await. Tarda la SUMA de todas.
+            resultados = []
+            for u in urls:
+                try:
+                    resultados.append(await bajar(cliente, u))
+                except Exception as e:
+                    resultados.append(e)
+        else:
+            # gather: todas a la vez, tarda lo que la más lenta (clase 20).
+            # return_exceptions=True: una URL rota vuelve como un valor más
+            # en la lista, en vez de explotar y perder los resultados de las otras.
+            resultados = await asyncio.gather(*(bajar(cliente, u) for u in urls),
+                                              return_exceptions=True)
     salida = []
     for url, r in zip(urls, resultados):
         if isinstance(r, Exception):
