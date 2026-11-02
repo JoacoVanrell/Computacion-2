@@ -34,5 +34,8 @@ services:
     image: python:3.11-slim
     container_name: compu2-lento
     command: ["python", "-u", "/srv/servidor_lento.py"]
+    # Python como PID 1 ignora SIGTERM si no instala un manejador: sin
+    # este init, `docker compose stop` esperaría los 10 s hasta el SIGKILL.
+    init: true
     volumes:
       - ./mediciones/servidor_lento.py:/srv/servidor_lento.py:ro
